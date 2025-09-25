@@ -11,7 +11,7 @@ import streamlit as st
 
 st.set_page_config(page_title="Click to Wish!", page_icon="🎉", layout="centered")
 
-FRIEND_URL  = os.getenv("FRIEND_LINKEDIN_URL", "https://www.linkedin.com/")
+FRIEND_URL  = os.getenv("FRIEND_LINKEDIN_URL", "https://www.linkedin.com/in/vamsi-boyapati-a98107213?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BpmkgaQhMRcK%2B%2FzgXSUY%2BOQ%3D%3D")
 FRIEND_NAME = os.getenv("FRIEND_NAME", "My Friend")
 REDIRECT_DELAY = int(os.getenv("REDIRECT_DELAY_SEC", "6"))
 DB_PATH = os.getenv("DB_PATH", "data.db")
@@ -203,4 +203,5 @@ if st.button("Open LinkedIn now"):
     )
 
 st.caption("Built by Likhith • Be kind, keep it fun. No scraping, no spam — just birthday science.")
+
 
