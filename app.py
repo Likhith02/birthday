@@ -203,3 +203,4 @@ if st.button("Open LinkedIn now"):
     )
 
 st.caption("Built by Likhith • Be kind, keep it fun. No scraping, no spam — just birthday science.")
+
