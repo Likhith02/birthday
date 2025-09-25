@@ -1,9 +1,9 @@
-
 import os
 import sqlite3
 import time
 from datetime import datetime
 from textwrap import dedent
+from typing import Optional
 
 import streamlit as st
 
@@ -17,8 +17,7 @@ DB_PATH = os.getenv("DB_PATH", "data.db")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     try:
-        
-        OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)
+        OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)  # Streamlit Cloud root secret
     except Exception:
         OPENAI_API_KEY = None
 
@@ -34,11 +33,12 @@ except Exception:
     _client = None
     _has_openai = False
 
+
+
 @st.cache_resource(show_spinner=False)
 def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.execute("PRAGMA journal_mode=WAL;")
-    # Create minimal tables (keep compatible with older versions)
     conn.execute("""
         CREATE TABLE IF NOT EXISTS clicks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -53,7 +53,7 @@ def get_conn():
             text TEXT
         );
     """)
-    # Try to add optional columns if they don't exist (ignore if already added)
+    # best-effort optional columns (ignore if they already exist)
     for col in ("ip TEXT", "ua TEXT", "src TEXT"):
         try:
             conn.execute(f"ALTER TABLE clicks ADD COLUMN {col};")
@@ -62,7 +62,7 @@ def get_conn():
     conn.commit()
     return conn
 
-def record_click(src: str | None = None, ip: str | None = None, ua: str | None = None):
+def record_click(src: Optional[str] = None, ip: Optional[str] = None, ua: Optional[str] = None):
     conn = get_conn()
     try:
         conn.execute(
@@ -70,7 +70,6 @@ def record_click(src: str | None = None, ip: str | None = None, ua: str | None =
             (datetime.utcnow().isoformat(), ip, ua, src),
         )
     except sqlite3.OperationalError:
-        # Fallback for very old schema
         conn.execute("INSERT INTO clicks (ts) VALUES (?)", (datetime.utcnow().isoformat(),))
     conn.commit()
 
@@ -95,6 +94,9 @@ def fetch_messages(limit: int = 50):
     return cur.fetchall()
 
 
+# ----------------------------
+# AI wish (visible errors + fallback)
+# ----------------------------
 @st.cache_data(ttl=60)
 def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
     fallbacks = [
@@ -123,11 +125,13 @@ def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
         text = (resp.choices[0].message.content or "").strip()
         return text or fallback
     except Exception as e:
-        # Show the actual reason (quota, auth, model access, etc.)
         st.warning(f"AI wish error: {type(e).__name__}: {e}")
         return fallback
 
 
+# ----------------------------
+# Confetti
+# ----------------------------
 def fire_confetti():
     html = dedent("""
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -141,6 +145,9 @@ def fire_confetti():
     st.components.v1.html(html, height=0)
 
 
+# ----------------------------
+# UI
+# ----------------------------
 st.title("🎉 Click to Wish " + FRIEND_NAME)
 
 with st.container(border=True):
@@ -149,10 +156,13 @@ with st.container(border=True):
         "Your click increases the global counter and creates joy (and mild chaos). ✨"
     )
 
-# Determine 'src' (e.g., /?src=linkedin)
+# Query param (?src=linkedin) — works on both new & older Streamlit
 src_val = None
 try:
-    qp = st.query_params  # Streamlit >=1.35
+    if hasattr(st, "query_params"):  # newer
+        qp = st.query_params
+    else:
+        qp = st.experimental_get_query_params()
     src_val = qp.get("src")
     if isinstance(src_val, list):
         src_val = src_val[0]
@@ -196,6 +206,9 @@ if msgs:
         who = n or "Anonymous"
         st.markdown(f"**{who}** · _{ts.split('T')[0]}_\n\n{t}")
 
+# ----------------------------
+# Stable countdown + iframe-safe redirect + fallbacks
+# ----------------------------
 st.divider()
 if "redirect_at" not in st.session_state:
     st.session_state["redirect_at"] = time.time() + REDIRECT_DELAY
@@ -204,26 +217,16 @@ remaining = int(max(0, round(st.session_state["redirect_at"] - time.time())))
 st.info(f"You'll be redirected to **{FRIEND_NAME}**'s LinkedIn profile in {remaining} seconds…")
 st.write(f"Redirecting in **{remaining}** seconds…")
 
-# Auto-open in new tab when timer hits 0 (works inside Streamlit iframe)
 if remaining <= 0 and not st.session_state.get("_redir_fired"):
     st.session_state["_redir_fired"] = True
-    # 1) Try a new tab
-    st.markdown(
-        f"<script>window.open('{FRIEND_URL}', '_blank');</script>",
-        unsafe_allow_html=True
-    )
-    # 2) Meta refresh (may only refresh the iframe; harmless)
-    st.markdown(
-        f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>",
-        unsafe_allow_html=True
-    )
+    # 1) Try a new tab (works inside Streamlit iframe)
+    st.markdown(f"<script>window.open('{FRIEND_URL}', '_blank');</script>", unsafe_allow_html=True)
+    # 2) Meta refresh (harmless; sometimes just refreshes iframe)
+    st.markdown(f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>", unsafe_allow_html=True)
 
-# Always provide manual fallbacks
+# Manual fallbacks
 st.markdown(f"[Go now → LinkedIn profile]({FRIEND_URL})")
 if st.button("Open LinkedIn now"):
-    st.markdown(
-        f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>",
-        unsafe_allow_html=True
-    )
+    st.markdown(f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>", unsafe_allow_html=True)
 
 st.caption("Built by Likhith • Be kind, keep it fun. No scraping, no spam — just birthday science.")
