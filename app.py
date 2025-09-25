@@ -1,23 +1,26 @@
 import os
 import sqlite3
 import time
+import tempfile
 from datetime import datetime
 from textwrap import dedent
 from typing import Optional
 
 import streamlit as st
 
+# Configuration
 st.set_page_config(page_title="Click to Wish!", page_icon="🎉", layout="centered")
 
-FRIEND_URL  = os.getenv("FRIEND_LINKEDIN_URL", "https://www.linkedin.com/in/vamsi-boyapati-a98107213/")
+FRIEND_URL = os.getenv("FRIEND_LINKEDIN_URL", "https://www.linkedin.com/in/vamsi-boyapati-a98107213/")
 FRIEND_NAME = os.getenv("FRIEND_NAME", "My Friend")
 REDIRECT_DELAY = int(os.getenv("REDIRECT_DELAY_SEC", "6"))
-DB_PATH = os.getenv("DB_PATH", "data.db")
+DB_PATH = os.getenv("DB_PATH") or os.path.join(tempfile.gettempdir(), "birthday_data.db")
 
+# OpenAI configuration (optional)
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     try:
-        OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)  # Streamlit Cloud root secret
+        OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", None)
     except Exception:
         OPENAI_API_KEY = None
 
@@ -33,12 +36,16 @@ except Exception:
     _client = None
     _has_openai = False
 
-
-
+# Database helper functions
 @st.cache_resource(show_spinner=False)
 def get_conn():
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.execute("PRAGMA journal_mode=WAL;")
+    # Attempt to use WAL journal mode; fallback to DELETE if unsupported
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+    except sqlite3.OperationalError:
+        conn.execute("PRAGMA journal_mode=DELETE;")
+    # Create tables if they don't exist
     conn.execute("""
         CREATE TABLE IF NOT EXISTS clicks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +77,10 @@ def record_click(src: Optional[str] = None, ip: Optional[str] = None, ua: Option
             (datetime.utcnow().isoformat(), ip, ua, src),
         )
     except sqlite3.OperationalError:
-        conn.execute("INSERT INTO clicks (ts) VALUES (?)", (datetime.utcnow().isoformat(),))
+        conn.execute(
+            "INSERT INTO clicks (ts) VALUES (?)",
+            (datetime.utcnow().isoformat(),),
+        )
     conn.commit()
 
 def get_counts() -> int:
@@ -93,10 +103,7 @@ def fetch_messages(limit: int = 50):
     cur = conn.execute("SELECT ts, name, text FROM messages ORDER BY id DESC LIMIT ?", (limit,))
     return cur.fetchall()
 
-
-# ----------------------------
-# AI wish (visible errors + fallback)
-# ----------------------------
+# AI wish function
 @st.cache_data(ttl=60)
 def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
     fallbacks = [
@@ -105,10 +112,8 @@ def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
         f"Alert: A well-wisher appeared! {total_clicks} clicks so far. Stay humble, stay hireable.",
     ]
     fallback = fallbacks[total_clicks % len(fallbacks)]
-
     if not _has_openai or not OPENAI_API_KEY:
         return fallback
-
     try:
         resp = _client.chat.completions.create(
             model="gpt-4o-mini",
@@ -128,10 +133,7 @@ def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
         st.warning(f"AI wish error: {type(e).__name__}: {e}")
         return fallback
 
-
-# ----------------------------
-# Confetti
-# ----------------------------
+# Confetti function
 def fire_confetti():
     html = dedent("""
         <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -144,10 +146,7 @@ def fire_confetti():
     """)
     st.components.v1.html(html, height=0)
 
-
-# ----------------------------
-# UI
-# ----------------------------
+# Main UI
 st.title("🎉 Click to Wish " + FRIEND_NAME)
 
 with st.container(border=True):
@@ -156,10 +155,10 @@ with st.container(border=True):
         "Your click increases the global counter and creates joy (and mild chaos). ✨"
     )
 
-# Query param (?src=linkedin) — works on both new & older Streamlit
+# Determine 'src' param from query string
 src_val = None
 try:
-    if hasattr(st, "query_params"):  # newer
+    if hasattr(st, "query_params"):
         qp = st.query_params
     else:
         qp = st.experimental_get_query_params()
@@ -169,15 +168,15 @@ try:
 except Exception:
     pass
 
-# Count once per session
+# Count click once per session
 if "_counted" not in st.session_state:
     record_click(src=src_val)
     st.session_state["_counted"] = True
     st.toast("Thanks! Your click was counted 🎉", icon="🎉")
     fire_confetti()
 
+# Display total count and AI status
 count = get_counts()
-
 c1, c2 = st.columns([1,1])
 with c1:
     st.metric("Total wishes so far", count)
@@ -187,10 +186,12 @@ with c2:
     if st.button("🎊 Test confetti"):
         fire_confetti()
 
+# Generate AI wish or fallback
 with st.spinner("AI is crafting a birthday wish…"):
     wish = generate_ai_wish(FRIEND_NAME, count)
 st.success(wish)
 
+# Message feed form
 with st.expander("Leave your roast/wish (optional)"):
     name = st.text_input("Your name (optional)")
     text = st.text_area("Roast or wish (keep it nice!)",
@@ -199,6 +200,7 @@ with st.expander("Leave your roast/wish (optional)"):
         add_message(name, text)
         st.toast("Submitted! 🎈", icon="🎈")
 
+# Show messages
 msgs = fetch_messages()
 if msgs:
     st.subheader("Live feed")
@@ -206,9 +208,7 @@ if msgs:
         who = n or "Anonymous"
         st.markdown(f"**{who}** · _{ts.split('T')[0]}_\n\n{t}")
 
-# ----------------------------
-# Stable countdown + iframe-safe redirect + fallbacks
-# ----------------------------
+# Countdown & redirect
 st.divider()
 if "redirect_at" not in st.session_state:
     st.session_state["redirect_at"] = time.time() + REDIRECT_DELAY
@@ -219,12 +219,12 @@ st.write(f"Redirecting in **{remaining}** seconds…")
 
 if remaining <= 0 and not st.session_state.get("_redir_fired"):
     st.session_state["_redir_fired"] = True
-    # 1) Try a new tab (works inside Streamlit iframe)
+    # Attempt to open new tab in Streamlit's iframe
     st.markdown(f"<script>window.open('{FRIEND_URL}', '_blank');</script>", unsafe_allow_html=True)
-    # 2) Meta refresh (harmless; sometimes just refreshes iframe)
+    # Meta refresh fallback
     st.markdown(f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>", unsafe_allow_html=True)
 
-# Manual fallbacks
+# Manual fallback
 st.markdown(f"[Go now → LinkedIn profile]({FRIEND_URL})")
 if st.button("Open LinkedIn now"):
     st.markdown(f"<meta http-equiv='refresh' content='0; url={FRIEND_URL}'>", unsafe_allow_html=True)
