@@ -94,7 +94,7 @@ def fetch_messages(limit: int = 50):
 def generate_ai_wish(friend_name: str, total_clicks: int) -> str:
     if not _has_openai:
         picks = [
-            f"Happy Birthday, {friend_name}! Another brave soul clicked. Count: {total_clicks}. May your KPIs be cake-per-slice! 🎂",
+            f"Happy Birthday, {friend_name}! Another brave soul clicked. Count: {total_clicks}.🎂",
             f"{friend_name}, +1 click to your LinkedIn charisma. Total: {total_clicks}. #OpenToRoasts",
             f"Alert: A well-wisher appeared! {total_clicks} clicks so far. Stay humble, stay hireable.",
         ]
@@ -203,5 +203,6 @@ if st.button("Open LinkedIn now"):
     )
 
 st.caption("Built by Likhith • Be kind, keep it fun. No scraping, no spam — just birthday science.")
+
 
 
