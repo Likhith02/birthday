@@ -27,14 +27,12 @@ This project is a playful side‑project demonstrating how to combine data, gene
 3. **Set your friend’s info** and run the app:
    ```bash
    # always set these before running Streamlit
-   set FRIEND_LINKEDIN_URL=https://www.linkedin.com/in/vamsi-boyapati-a98107213?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BpmkgaQhMRcK%2B%2FzgXSUY%2BOQ%3D%3D
-   set FRIEND_NAME=Vamsi Boyapati
-   # optional for AI wishes
+   set FRIEND_LINKEDIN_URL=
+   set FRIEND_NAME=
    set OPENAI_API_KEY=sk-... 
 
    streamlit run app.py
    ```
-4. Open the local URL printed in the terminal (usually `http://localhost:8501`). Each visit counts once per browser session and triggers a confetti burst. After a short countdown, the page redirects to `FRIEND_LINKEDIN_URL`.
 
 ### Cleaning up the database
 
@@ -43,18 +41,6 @@ The app uses a local SQLite database (`data.db`) to store click counts and messa
 del data.db data.db-shm data.db-wal
 ```
 
-## 🔥 Deploy to Streamlit Cloud
-
-1. Fork or clone this repository.
-2. Sign in to [Streamlit Community Cloud](https://share.streamlit.io/) and create a new app from your repository.
-3. In the app settings, add the following secrets:
-   ```
-   FRIEND_LINKEDIN_URL = "https://www.linkedin.com/in/vamsi-boyapati-a98107213?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BpmkgaQhMRcK%2B%2FzgXSUY%2BOQ%3D%3D"
-   FRIEND_NAME = "Vamsi Boyapati"
-   # optional
-   # OPENAI_API_KEY = "sk-..."
-   ```
-4. Deploy and share the public URL on LinkedIn or with friends. Each click will increment the counter and direct visitors to your friend’s profile.
 
 ## ✈ Features
 
